@@ -1,2 +1,3 @@
-This is an Note taking API webapp with backend functionality using express.js and node.js.
-DB storage done in Mongo.db
+This a clone of whatsapp named chatapp focusing on backend functionality.
+Web applications using Node.js and Express.js
+DBs stored in MongoDB
