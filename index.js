@@ -3,96 +3,172 @@ const app = express();
 const port = 8080;
 const mongoose = require("mongoose");
 const path = require("path");
-const Chat = require("./models/chat.js");
+const Note = require("./models/note.js");
 const methodOverride = require('method-override');
-const ExpressError = require("./ExpressError.js");
+const NoteNotFoundError = require("./NoteNotFoundError.js");
 
 main()
 .then((res) => {console.log("Connection successful")})
 .catch((err) => console.log(err));
 
 async function main() {
-  await mongoose.connect('mongodb://127.0.0.1:27017/chatapp');
+  await mongoose.connect('mongodb://127.0.0.1:27017/notetake');
 }
 
 app.set("views", path.join(__dirname, "/views"));
 app.set("view engine", "ejs");
-app.use(express.static(path.join(__dirname, "/public")));
 app.use(express.urlencoded({extended : true}));
 app.use(methodOverride('_method'));
 
-function asyncWrap(fn) {
-    return function(req, res, next) {
-        fn(req, res, next).catch((err) => next(err));
-    };
-};
+//Testing DB//
+ 
+//const newNote = new Note({
+//    title: 'My First Note',
+//    content: 'This is the content of my first note.'
+//});
 
-//Index Route
-app.get("/chats", async (req, res, next) =>{
-    let chats = await Chat.find();
-    console.log(chats);
-    res.render("chats.ejs", {chats});
+//newNote.save()
+//    .then(note => console.log('Note created:', note))
+//    .catch(err => console.error('Error creating note:', err));
+
+//api testing
+app.get("/", (req, res) => {
+    res.send("Root is working");
 });
 
-//New Route
-app.get("/chats/new", (req, res) =>{
-    res.render("new.ejs");
+//INDEX PAGE
+app.get("/notes", async (req, res, next) =>{
+    let notes = await Note.find();
+    console.log(notes);
+    res.render("notes.ejs", {notes});
 });
 
-//Create Route
-app.post("/chats", (req, res, next) =>{
-        let {from, to, msg} = req.body;
-        let newChat = new Chat ({
-        from: from,
-        to: to,
-        msg: msg,
-        created_at: new Date(),
-     });
-
-      newChat.save()
-     .then((res) => {console.log("new chat saved in DB")})
-     .catch((err) => {console.log(err)});
-      res.redirect("/chats");
-});
-
-//New Show Route
-app.get("/chats/:id", async(req, res, next) =>{
-    let {id} = req.params;
-    let chat = await Chat.findById(id);
-    if (!chat) {
-        next(new ExpressError(404, "Chat Not found"));
+//CREATE NOTE PAGE
+app.get('/notes/create', async (req, res) => {
+    try {
+      const note = {}; 
+      res.render('createNote.ejs', { note });
+    } catch (err) {
+      console.error(err);
+      res.status(500).render('error.ejs');
     }
-    res.render("edit.ejs", {chat});
-})
+  });
+   
+//POST NOTE ROUTE
+app.post('/api/notes', async (req, res) => {
+    const { title, content } = req.body;
+    const newNote = new Note({ title, content });
+    const savedNote = await newNote.save();
+    res.redirect("/notes");
 
-//Edit Route
-app.get("/chats/:id/edit", async (req, res) =>{
-        let {id} = req.params;
-        let chat = await Chat.findById(id);
-        res.render("edit.ejs", {chat});
-})
+    const validationErrors = [];
+    if (!title || title.trim().length === 0) {
+        validationErrors.push('Title is required');
+    } else if (title.length > 50) {
+        validationErrors.push('Title must be less than 50 characters');
+    }
 
-//Update Route
-app.put("/chats/:id", async (req, res) =>{
-    let {id} = req.params;
-    let {msg: newMsg} = req.body;
-    let updatedChat = await Chat.findByIdAndUpdate(id, {msg: newMsg}, {runValidators: true, new:true});
-    console.log(updatedChat);
-    res.redirect("/chats");
+    if (!content || content.trim().length === 0) {
+        validationErrors.push('Content is required');
+    } else if (content.length < 10) {
+        validationErrors.push('Content must be at least 10 characters');
+    }
+
+    if (validationErrors.length) {
+        return res.status(400).json({ errors: validationErrors });
+    }
 });
 
-//Destroy Route
-app.delete("/chats/:id", async (req, res) =>{
-    let {id} = req.params;
-    let deletedChat = await Chat.findByIdAndDelete(id);
-    console.log(deletedChat);
-    res.redirect("/chats");
+//GET NOTE ID
+app.get("/notes/:id", async (req, res) => {
+    try {
+        const noteId = req.params.id;
+        const note = await Note.findById(noteId);
+        if (!note) {
+            throw new NoteNotFoundError();
+        }
+        res.render("viewnote.ejs", { note }); 
+    } catch (err) {
+        console.error(err); 
+        res.status(500).json({ error: "Something went wrong" }); 
+    }
 });
 
+//EDIT FORM
+app.get('/notes/:id/edit', async (req, res) => {
+    try {
+        const noteData = await Note.findById(req.params.id);
+        if (!noteData) {
+            return res.status(404).render('error', { error: 'Note not found' });
+        }
+        res.render('editNote', { noteData });
+    } catch (err) {
+        console.error(err); 
+        res.status(500).json({ error: "Something went wrong" });
+    }
+});
+
+//UPDATE ROUTE
+app.put('/api/notes/:id', async (req, res) => {
+    const noteId = req.params.id;
+    const { title, content } = req.body;
+    try {
+        const updatedNote = await Note.findByIdAndUpdate(noteId, { title, content }, { new: true });
+        if (!updatedNote) {
+            return res.status(404).json({ error: 'Note not found' });
+        }
+        res.redirect('/notes');
+        } catch (err) {
+            console.error('Error updating note:', err);
+            res.status(500).json({ error: err.message });
+        }
+
+        //For validation err
+        const validationErrors = [];
+        if (!title || title.trim().length === 0) {
+            validationErrors.push('Title is required');
+        } else if (title.length > 50) {
+            validationErrors.push('Title must be less than 50 characters');
+        }
+    
+        if (!content || content.trim().length === 0) {
+            validationErrors.push('Content is required');
+        } else if (content.length < 10) {
+            validationErrors.push('Content must be at least 10 characters');
+        }
+    
+        if (validationErrors.length) {
+            return res.status(400).json({ errors: validationErrors });
+        }
+});
+
+//DESTROY ROUTE
+app.delete('/notes/:id', async (req, res) => {
+    const noteId = req.params.id;
+    try {
+        const deletedNote = await Note.findByIdAndDelete(noteId);
+        if (!deletedNote) {
+            return res.status(404).json({ error: 'Note not found' });
+        }
+        console.log("note deleted");
+        res.redirect("/notes");
+    } catch (err) {
+        console.error('Error deleting note:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+//Error
 app.use((err, req, res, next) => {
-    let {status=500, message="Some Error occured"} = err;
-    res.status(status).send(message);
-})
+    console.error(err.stack);
+    if (err.statusCode) {
+        res.status(err.statusCode).json({ error: err.message });
+        next();
+    } else {
+        res.status(500).json({ error: 'Something went wrong' });
+    }
+});
 
 app.listen(port, () => {
     console.log(`App is listening on ${port}`);

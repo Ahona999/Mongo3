@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Notes</title>
+</head>
+    <body>
+            <h1>Your Notes</h1>
+                <ul>
+                    <% for(let note of notes) { %>
+                        <li>
+                            <h2><%= note.title %></h2>
+                            <p><%= note.content %></p>
+                            <a href="/notes/<%= note._id %>">View</a>
+                        </li>
+                        <a href="/notes/<%= note._id %>/edit">Edit</a>
+
+                        <form action="/notes/<%= note._id %>?_method=DELETE" method="post">
+                            <button>Delete</button>
+                        </form>
+                    <% } %>
+                </ul>
+            <a href="/notes/create">Create New Note</a>
+    </body>
+</html>
